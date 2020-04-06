@@ -6,19 +6,21 @@ import (
 	"strings"
 )
 
-// Error is a standard application error.
-// This type should always have a non-nil nested err and therefore cannot itself
-// be the root of an error stack.
+// Error represents a standard application error.
+// Error should always have a non-nil nested err and therefore the type cannot
+// itself be the root of an error stack.
 type Error struct {
-	// For use by application or clients.
+	// Represents the error type to be used by client or application.
 	// e.g. "unexpected_error", "database_error", "not_exists" etc.
 	code string
 
-	// User-friendly localized error message.
+	// A user-friendly error message. Does not get printed with Error().
 	message string
 
-	// Operation (function name) and nested error.
+	// Operation being performed, usually a function/method name.
 	op  string
+
+	// Nested error for building an Error() stacktrace. Should not be nil.
 	err error
 }
 
@@ -33,7 +35,7 @@ func (e *Error) Error() string {
 	}
 
 	// If nested err wraps an error, write its Error() message.
-	// Otherwise write the root's Error() and code.
+	// Otherwise write the nested root's Error() and code.
 	if errors.Unwrap(e.err) != nil {
 		sb.WriteString(e.err.Error())
 	} else {
@@ -41,9 +43,6 @@ func (e *Error) Error() string {
 		if e.code != "" {
 			sb.WriteString(fmt.Sprintf(" [%s]", e.code))
 		}
-	}
-	if ErrorMessage(e.err) != "" {
-		sb.WriteString(" " + e.message)
 	}
 
 	return sb.String()
@@ -94,7 +93,7 @@ func (e *Error) ClearClientMsg() *Error {
 }
 
 // New constructs a new *Error.
-// cause is used to create a nested error.
+// `cause` is used to create a nested error.
 func New(op, code, cause string) *Error {
 	return &Error{
 		op:   op,
@@ -119,11 +118,6 @@ func New(op, code, cause string) *Error {
 // 			return e.Wrap(op, err, fmt.Sprintf("cannot find id: %v", id))
 // 		}
 //
-// Note: Optionally, function can be modified to provide a Wrapf behaviour.
-// There will be extra effort to convert optionalInfo
-// from `...string` to `...interface{}` and check type safety.
-// You will also lose format linting/checking in IDEs.
-// Assuming Basic Usage will be the common use case, I am against the feature.
 func Wrap(op string, err error, optionalInfo ...string) *Error {
 	innerErr := err
 	if len(optionalInfo) > 0 {
