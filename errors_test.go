@@ -103,7 +103,7 @@ func TestErrorMessage(t *testing.T) {
 			name: "set message returns correctly",
 			fn: func() string {
 				op := "Foo"
-				err := New(op, CodeUnexpected, "unexpected error occurred").SetClientMsg("oh no")
+				err := New(op, CodeUnexpected, "unexpected error occurred").SetMessage("oh no")
 				return ErrorMessage(err)
 			},
 			want: "oh no",
@@ -112,10 +112,10 @@ func TestErrorMessage(t *testing.T) {
 			name: "multiple messages but outermost message is returned",
 			fn: func() string {
 				op := "Foo"
-				err1 := New(op, CodeUnexpected, "bar").SetClientMsg("don't show this")
+				err1 := New(op, CodeUnexpected, "bar").SetMessage("don't show this")
 
 				op2 := "Foo2"
-				err2 := Wrap(op2, err1).SetClientMsg("show this")
+				err2 := Wrap(op2, err1).SetMessage("show this")
 
 				return ErrorMessage(err2)
 			},
@@ -128,7 +128,7 @@ func TestErrorMessage(t *testing.T) {
 				err := New(op, CodeInternal, "cannot do something")
 
 				const op2 = "Outer"
-				err = Wrap(op2, err).SetClientMsg("wrapped by fmt.Errorf")
+				err = Wrap(op2, err).SetMessage("wrapped by fmt.Errorf")
 
 				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
 
@@ -143,12 +143,12 @@ func TestErrorMessage(t *testing.T) {
 			name: "cleared message does not get returned",
 			fn: func() string {
 				const op = "Foo"
-				err := New(op, CodeInternal, "fail fail fail").SetClientMsg("clear me!")
+				err := New(op, CodeInternal, "fail fail fail").SetMessage("clear me!")
 
 				const op2 = "Outer"
-				err = Wrap(op2, err).SetClientMsg("clear me too!")
+				err = Wrap(op2, err).SetMessage("clear me too!")
 
-				err = err.ClearClientMsg()
+				err = err.ClearMessage()
 				return ErrorMessage(err)
 			},
 			want: "",

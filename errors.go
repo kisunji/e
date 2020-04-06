@@ -25,36 +25,6 @@ type Error struct {
 	err error
 }
 
-func (e *Error) Code() string {
-	if e == nil {
-		return ""
-	}
-	if e.code != "" {
-		return e.code
-	}
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.code != "" {
-			return e.code
-		}
-	}
-	return ""
-}
-
-func (e *Error) Message() string {
-	if e == nil {
-		return ""
-	}
-	if e.message != "" {
-		return e.message
-	}
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.message != "" {
-			return e.message
-		}
-	}
-	return ""
-}
-
 func (e *Error) Error() string {
 	if e == nil {
 		return ""
@@ -86,6 +56,22 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
+
+func (e *Error) Code() string {
+	if e == nil {
+		return ""
+	}
+	if e.code != "" {
+		return e.code
+	}
+	for err := e.err; err != nil; err = errors.Unwrap(err) {
+		if e, ok := err.(*Error); ok && e.code != "" {
+			return e.code
+		}
+	}
+	return ""
+}
+
 // SetCode adds an error type to *Error.
 func (e *Error) SetCode(code string) *Error {
 	if e != nil {
@@ -94,17 +80,32 @@ func (e *Error) SetCode(code string) *Error {
 	return e
 }
 
-// SetClientMsg adds a user-friendly message to *Error.
+func (e *Error) Message() string {
+	if e == nil {
+		return ""
+	}
+	if e.message != "" {
+		return e.message
+	}
+	for err := e.err; err != nil; err = errors.Unwrap(err) {
+		if e, ok := err.(*Error); ok && e.message != "" {
+			return e.message
+		}
+	}
+	return ""
+}
+
+// SetMessage adds a user-friendly message to *Error.
 // Important: ensure the string is localized for the end-user.
-func (e *Error) SetClientMsg(localizedMsg string) *Error {
+func (e *Error) SetMessage(message string) *Error {
 	if e != nil {
-		e.message = localizedMsg
+		e.message = message
 	}
 	return e
 }
 
-// ClearClientMsg unsets messages from the error stack.
-func (e *Error) ClearClientMsg() *Error {
+// ClearMessage unsets all messages from *Error's stack.
+func (e *Error) ClearMessage() *Error {
 	if e == nil {
 		return nil
 	}
@@ -179,6 +180,8 @@ type ClientFacing interface {
 	Message() string
 }
 
+// ErrorCode returns the first unwrapped Code of an error which implements
+// ClientFacing interface. Otherwise returns an empty string.
 func ErrorCode(err error) string {
 	for err != nil {
 		if e, ok := err.(ClientFacing); ok && e.Code() != "" {
@@ -189,6 +192,8 @@ func ErrorCode(err error) string {
 	return ""
 }
 
+// ErrorMessage returns the first unwrapped Message of an error which implements
+// ClientFacing interface. Otherwise returns an empty string.
 func ErrorMessage(err error) string {
 	for err != nil {
 		if e, ok := err.(ClientFacing); ok && e.Message() != "" {
