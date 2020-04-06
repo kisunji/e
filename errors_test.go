@@ -75,8 +75,6 @@ func TestErrors(t *testing.T) {
 			},
 			want: "Outer2: not encouraged but compatible: Outer: Inner: cannot do something [internal_error]",
 		},
-		// Get Error Message
-		// Set Error Message
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

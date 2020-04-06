@@ -8,16 +8,16 @@ import (
 
 // Error is a standard application error
 // This type should always have a non-nil nested err
-// and therefore cannot be the final root of an error stack
+// and therefore cannot itself be the root of an error stack
 type Error struct {
-	// Error code for use by application or clients
+	// For use by application or clients
+	// e.g. "unexpected_error", "database_error", "not_exists" etc.
 	code string
 
-	// User-friendly localized message
-	// Do not expose details
+	// User-friendly localized error message
 	message string
 
-	// Operation and nested error
+	// Operation (function name) and nested error
 	op  string
 	err error
 }
@@ -33,7 +33,7 @@ func (e *Error) Error() string {
 	}
 
 	// If nested err wraps an error, write its Error() message.
-	// Otherwise write the root's Error(), code, and message.
+	// Otherwise write the root's Error() and code
 	if errors.Unwrap(e.err) != nil {
 		sb.WriteString(e.err.Error())
 	} else {
@@ -69,9 +69,10 @@ func (e *Error) OverwriteCode(code string) *Error {
 	return e
 }
 
-// SetClientMsg adds a user-friendly message to *Error
+// SetClientMsg adds a user-friendly message to *Error, overwriting any existing messages
 // Important: ensure the string is localized for the end-user
 func (e *Error) SetClientMsg(localizedMsg string) *Error {
+	_ = e.ClearClientMsg()
 	if e != nil {
 		e.message = localizedMsg
 	}
