@@ -1,4 +1,4 @@
-package errs
+package e
 
 import (
 	"errors"
@@ -61,7 +61,7 @@ func TestErrors(t *testing.T) {
 		},
 		{
 			name: "can non-pkg Wrap e.Error",
-			fn:   func() error {
+			fn: func() error {
 				const op = "Inner"
 				err := New(op, CodeInternal, "cannot do something")
 
@@ -93,7 +93,7 @@ func TestErrorMessage(t *testing.T) {
 	}{
 		{
 			name: "unset message returns blank",
-			fn:   func() string {
+			fn: func() string {
 				op := "Foo"
 				err := New(op, CodeUnexpected, "unexpected error occurred")
 				return ErrorMessage(err)
@@ -102,7 +102,7 @@ func TestErrorMessage(t *testing.T) {
 		},
 		{
 			name: "set message returns correctly",
-			fn:   func() string {
+			fn: func() string {
 				op := "Foo"
 				err := New(op, CodeUnexpected, "unexpected error occurred").SetClientMsg("oh no")
 				return ErrorMessage(err)
@@ -124,7 +124,7 @@ func TestErrorMessage(t *testing.T) {
 		},
 		{
 			name: "works with non-pkg wrapping",
-			fn:   func() string {
+			fn: func() string {
 				const op = "Inner"
 				err := New(op, CodeInternal, "cannot do something")
 
@@ -134,7 +134,7 @@ func TestErrorMessage(t *testing.T) {
 				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
 
 				const op3 = "Outer2"
-				wrap2 :=  Wrap(op3, wrap)
+				wrap2 := Wrap(op3, wrap)
 
 				return ErrorMessage(wrap2)
 			},
