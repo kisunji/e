@@ -13,7 +13,6 @@ const (
 )
 
 func TestErrors(t *testing.T) {
-
 	tests := []struct {
 		name string
 		fn   func() error
