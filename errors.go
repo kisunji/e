@@ -14,14 +14,45 @@ type Error struct {
 	// e.g. "unexpected_error", "database_error", "not_exists" etc.
 	code string
 
-	// A user-friendly error message. Does not get printed with Error().
+	// A user-friendly error message.
+	// Does not get printed with Error().
 	message string
 
-	// Operation being performed, usually a function/method name.
-	op  string
+	// Operation being performed--usually a function/method name.
+	op string
 
 	// Nested error for building an Error() stacktrace. Should not be nil.
 	err error
+}
+
+func (e *Error) Code() string {
+	if e == nil {
+		return ""
+	}
+	if e.code != "" {
+		return e.code
+	}
+	for err := e.err; err != nil; err = errors.Unwrap(err) {
+		if e, ok := err.(*Error); ok && e.code != "" {
+			return e.code
+		}
+	}
+	return ""
+}
+
+func (e *Error) Message() string {
+	if e == nil {
+		return ""
+	}
+	if e.message != "" {
+		return e.message
+	}
+	for err := e.err; err != nil; err = errors.Unwrap(err) {
+		if e, ok := err.(*Error); ok && e.message != "" {
+			return e.message
+		}
+	}
+	return ""
 }
 
 func (e *Error) Error() string {
@@ -55,30 +86,24 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-// OverwriteCode will replace the root *Error's code.
-func (e *Error) OverwriteCode(code string) *Error {
-	if e == nil {
-		return nil
-	}
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.code != "" {
-			e.code = code
-		}
+// SetCode adds an error type to *Error.
+func (e *Error) SetCode(code string) *Error {
+	if e != nil {
+		e.code = code
 	}
 	return e
 }
 
-// SetClientMsg adds a user-friendly message to *Error, overwriting any existing
-// messages. Important: ensure the string is localized for the end-user.
+// SetClientMsg adds a user-friendly message to *Error.
+// Important: ensure the string is localized for the end-user.
 func (e *Error) SetClientMsg(localizedMsg string) *Error {
-	_ = e.ClearClientMsg()
 	if e != nil {
 		e.message = localizedMsg
 	}
 	return e
 }
 
-// ClearClientMsg unsets messages down the error stack.
+// ClearClientMsg unsets messages from the error stack.
 func (e *Error) ClearClientMsg() *Error {
 	if e == nil {
 		return nil
@@ -93,7 +118,17 @@ func (e *Error) ClearClientMsg() *Error {
 }
 
 // New constructs a new *Error.
-// `cause` is used to create a nested error.
+//
+// Usage:
+// 		func Foo() error {
+// 			const op = "Foo"
+// 			if bar != nil {
+// 				return e.New(op, "unexpected_error", "bar not nil")
+// 			}
+//			...
+//			return nil
+//		}
+//
 func New(op, code, cause string) *Error {
 	return &Error{
 		op:   op,
@@ -102,18 +137,26 @@ func New(op, code, cause string) *Error {
 	}
 }
 
-// Wrap adds op to the logical stacktrace.
+// Wrap adds op to the logical stacktrace. Recommended to chain with SetCode()
+// if wrapping an external error type that does not implement ClientFacing.
+//
 // OptionalInfo can be passed to insert more context at the wrap site.
 // Only the first OptionalInfo string will be used.
 //
-// Basic Usage:
-// 		err := foo()
+// Basic usage:
+// 		err := Foo()
 //		if err != nil {
 // 			return e.Wrap(op, err)
 // 		}
 //
-// Adding Info:
-// 		err := foo()
+// Wrapping an external error:
+//		err := db.Get()
+// 		if err != nil {
+//			return e.Wrap(op, err).SetCode("database_error")
+//		}
+//
+// Adding additional info:
+// 		err := Foo()
 //		if err != nil {
 // 			return e.Wrap(op, err, fmt.Sprintf("cannot find id: %v", id))
 // 		}
@@ -129,21 +172,27 @@ func Wrap(op string, err error, optionalInfo ...string) *Error {
 	}
 }
 
+// ClientFacing allows custom error types to be used with utility functions
+// ErrorCode() and ErrorMessage().
+type ClientFacing interface {
+	Code() string
+	Message() string
+}
+
 func ErrorCode(err error) string {
-	if err == nil {
-		return ""
-	} else if e, ok := err.(*Error); ok && e.code != "" {
-		return e.code
-	} else if ok && e.err != nil {
-		return ErrorCode(e.err)
+	for err != nil {
+		if e, ok := err.(ClientFacing); ok && e.Code() != "" {
+			return e.Code()
+		}
+		err = errors.Unwrap(err)
 	}
-	return "unexpected_error"
+	return ""
 }
 
 func ErrorMessage(err error) string {
 	for err != nil {
-		if e, ok := err.(*Error); ok && e.message != ""{
-			return e.message
+		if e, ok := err.(ClientFacing); ok && e.Message() != "" {
+			return e.Message()
 		}
 		err = errors.Unwrap(err)
 	}

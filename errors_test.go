@@ -60,7 +60,7 @@ func TestErrors(t *testing.T) {
 			want: "Foo: basic error",
 		},
 		{
-			name: "can non-pkg Wrap e.Error",
+			name: "can non-pkg wrap Error",
 			fn: func() error {
 				const op = "Inner"
 				err := New(op, CodeInternal, "cannot do something")
@@ -110,7 +110,7 @@ func TestErrorMessage(t *testing.T) {
 			want: "oh no",
 		},
 		{
-			name: "only the first message is returned",
+			name: "multiple messages but outermost message is returned",
 			fn: func() string {
 				op := "Foo"
 				err1 := New(op, CodeUnexpected, "bar").SetClientMsg("don't show this")
@@ -139,6 +139,95 @@ func TestErrorMessage(t *testing.T) {
 				return ErrorMessage(wrap2)
 			},
 			want: "wrapped by fmt.Errorf",
+		},
+		{
+			name: "cleared message does not get returned",
+			fn: func() string {
+				const op = "Foo"
+				err := New(op, CodeInternal, "fail fail fail").SetClientMsg("clear me!")
+
+				const op2 = "Outer"
+				err = Wrap(op2, err).SetClientMsg("clear me too!")
+
+				err = err.ClearClientMsg()
+				return ErrorMessage(err)
+			},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.fn(); got != tt.want {
+				t.Errorf("\ngot:  %q\nwant: %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestErrorCode(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func() string
+		want string
+	}{
+		{
+			name: "unset code returns blank",
+			fn: func() string {
+				op := "Foo"
+				err := New(op, "", "unexpected error occurred")
+				return ErrorCode(err)
+			},
+			want: "",
+		},
+		{
+			name: "set code with New() returns correctly",
+			fn: func() string {
+				op := "Foo"
+				err := New(op, CodeUnexpected, "unexpected error occurred")
+				return ErrorCode(err)
+			},
+			want: CodeUnexpected,
+		},
+		{
+			name: "set code with Wrap() returns correctly",
+			fn: func() string {
+				op := "Foo"
+				err := errors.New("db error occurred")
+				wrap := Wrap(op, err).SetCode(CodeDatabase)
+				return ErrorCode(wrap)
+			},
+			want: CodeDatabase,
+		},
+		{
+			name: "multiple codes but outermost code is returned",
+			fn: func() string {
+				op := "Foo"
+				err1 := New(op, CodeUnexpected, "bar")
+
+				op2 := "Foo2"
+				err2 := Wrap(op2, err1).SetCode(CodeInternal)
+
+				return ErrorCode(err2)
+			},
+			want: CodeInternal,
+		},
+		{
+			name: "works with non-pkg wrapping",
+			fn: func() string {
+				const op = "Inner"
+				err := New(op, CodeInternal, "cannot do something")
+
+				const op2 = "Outer"
+				err = Wrap(op2, err)
+
+				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
+
+				const op3 = "Outer2"
+				wrap2 := Wrap(op3, wrap)
+
+				return ErrorCode(wrap2)
+			},
+			want: CodeInternal,
 		},
 	}
 	for _, tt := range tests {
