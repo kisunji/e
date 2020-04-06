@@ -6,18 +6,18 @@ import (
 	"strings"
 )
 
-// Error is a standard application error
-// This type should always have a non-nil nested err
-// and therefore cannot itself be the root of an error stack
+// Error is a standard application error.
+// This type should always have a non-nil nested err and therefore cannot itself
+// be the root of an error stack.
 type Error struct {
-	// For use by application or clients
+	// For use by application or clients.
 	// e.g. "unexpected_error", "database_error", "not_exists" etc.
 	code string
 
-	// User-friendly localized error message
+	// User-friendly localized error message.
 	message string
 
-	// Operation (function name) and nested error
+	// Operation (function name) and nested error.
 	op  string
 	err error
 }
@@ -33,7 +33,7 @@ func (e *Error) Error() string {
 	}
 
 	// If nested err wraps an error, write its Error() message.
-	// Otherwise write the root's Error() and code
+	// Otherwise write the root's Error() and code.
 	if errors.Unwrap(e.err) != nil {
 		sb.WriteString(e.err.Error())
 	} else {
@@ -56,7 +56,7 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-// OverwriteCode will replace the root *Error's code
+// OverwriteCode will replace the root *Error's code.
 func (e *Error) OverwriteCode(code string) *Error {
 	if e == nil {
 		return nil
@@ -69,8 +69,8 @@ func (e *Error) OverwriteCode(code string) *Error {
 	return e
 }
 
-// SetClientMsg adds a user-friendly message to *Error, overwriting any existing messages
-// Important: ensure the string is localized for the end-user
+// SetClientMsg adds a user-friendly message to *Error, overwriting any existing
+// messages. Important: ensure the string is localized for the end-user.
 func (e *Error) SetClientMsg(localizedMsg string) *Error {
 	_ = e.ClearClientMsg()
 	if e != nil {
@@ -79,7 +79,7 @@ func (e *Error) SetClientMsg(localizedMsg string) *Error {
 	return e
 }
 
-// ClearClientMsg unsets message through the entire error stack
+// ClearClientMsg unsets messages down the error stack.
 func (e *Error) ClearClientMsg() *Error {
 	if e == nil {
 		return nil
@@ -93,8 +93,8 @@ func (e *Error) ClearClientMsg() *Error {
 	return e
 }
 
-// Constructs a new Error struct
-// cause is used to create a nested error
+// New constructs a new *Error.
+// cause is used to create a nested error.
 func New(op, code, cause string) *Error {
 	return &Error{
 		op:   op,
@@ -103,9 +103,9 @@ func New(op, code, cause string) *Error {
 	}
 }
 
-// Wrap adds op to the logical stacktrace
-// OptionalInfo can be passed to insert more context at the wrap site
-// Only the first OptionalInfo string will be used
+// Wrap adds op to the logical stacktrace.
+// OptionalInfo can be passed to insert more context at the wrap site.
+// Only the first OptionalInfo string will be used.
 //
 // Basic Usage:
 // 		err := foo()
@@ -119,11 +119,11 @@ func New(op, code, cause string) *Error {
 // 			return e.Wrap(op, err, fmt.Sprintf("cannot find id: %v", id))
 // 		}
 //
-// Optionally, function can be modified to provide a Wrapf behaviour
+// Note: Optionally, function can be modified to provide a Wrapf behaviour.
 // There will be extra effort to convert optionalInfo
-// from `...string` to `...interface{}` and check type safety
-// You will also lose format linting/checking in IDEs
-// Assuming Basic Usage will be the common use case, I am against the feature
+// from `...string` to `...interface{}` and check type safety.
+// You will also lose format linting/checking in IDEs.
+// Assuming Basic Usage will be the common use case, I am against the feature.
 func Wrap(op string, err error, optionalInfo ...string) *Error {
 	innerErr := err
 	if len(optionalInfo) > 0 {
