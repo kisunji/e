@@ -59,7 +59,7 @@ func Foo(bar string) error {
 }
 ```
 
-### Wrapping an non-pkg error type
+### Wrapping a different error type
 
 `Wrap()` can be chained with `SetCode()` to provide a new code for errors from another package (or default go errors)
 ```go
