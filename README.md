@@ -1,4 +1,4 @@
-# github.com/kisunji/e
+# kisunji/e
 
 ![Go](https://github.com/kisunji/e/workflows/Go/badge.svg)
 
