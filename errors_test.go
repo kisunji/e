@@ -25,7 +25,7 @@ func TestErrors(t *testing.T) {
 
 				return New(op, CodeDatabase, "cannot do something")
 			},
-			want: "Foo: cannot do something [database_error]",
+			want: "Foo: [database_error] cannot do something",
 		},
 		{
 			name: "wrap adds op",
@@ -36,7 +36,7 @@ func TestErrors(t *testing.T) {
 				const op2 = "Outer"
 				return Wrap(op2, err)
 			},
-			want: "Outer: Inner: cannot do something [internal_error]",
+			want: "Outer: Inner: [internal_error] cannot do something",
 		},
 		{
 			name: "wrap adds op and optionalInfo",
@@ -47,7 +47,7 @@ func TestErrors(t *testing.T) {
 				const op2 = "Outer"
 				return Wrap(op2, err, "optional info here")
 			},
-			want: "Outer: (optional info here): Inner: cannot do something [internal_error]",
+			want: "Outer: (optional info here): Inner: [internal_error] cannot do something",
 		},
 		{
 			name: "can wrap non-package errors",
@@ -72,7 +72,38 @@ func TestErrors(t *testing.T) {
 				const op3 = "Outer2"
 				return Wrap(op3, wrap)
 			},
-			want: "Outer2: not encouraged but compatible: Outer: Inner: cannot do something [internal_error]",
+			want: "Outer2: not encouraged but compatible: Outer: Inner: [internal_error] cannot do something",
+		},
+		{
+			name: "multiple SetCode display correctly",
+			fn: func() error {
+				const op = "Inner"
+				err := New(op, CodeUnexpected, "unexpected error occurred")
+
+				const op2 = "Outer"
+				err2 := Wrap(op2, err)
+
+				err3 := fmt.Errorf("%v%w", "BADWRAP", err2)
+
+				const op3 = "Outer2"
+				err4 := Wrap(op3, err3, "changed code to internal").SetCode(CodeInternal)
+
+				err5 := fmt.Errorf("%v%w", "MOREBADWRAP", err4)
+
+				const op4 = "Outer3"
+				err6 := Wrap(op4, err5, "changed code to database").SetCode(CodeDatabase)
+				return err6
+			},
+			want: "Outer3: [database_error] (changed code to database): MOREBADWRAPOuter2: [internal_error] (changed code to internal): BADWRAPOuter: Inner: [unexpected_error] unexpected error occurred",
+		},
+		{
+			name: "wrap non-pkg err then set code",
+			fn: func() error {
+				const op = "Foo"
+				err := errors.New("database error")
+				return Wrap(op, err).SetCode(CodeDatabase)
+			},
+			want: "Foo: [database_error] database error",
 		},
 	}
 	for _, tt := range tests {
@@ -148,6 +179,9 @@ func TestErrorMessage(t *testing.T) {
 				const op2 = "Outer"
 				err = Wrap(op2, err).SetMessage("clear me too!")
 
+				const op3 = "Outer2"
+				err = Wrap(op3, err).SetMessage("clear all of us!")
+
 				err = err.ClearMessage()
 				return ErrorMessage(err)
 			},
@@ -198,7 +232,20 @@ func TestErrorCode(t *testing.T) {
 			want: CodeDatabase,
 		},
 		{
-			name: "multiple codes but outermost code is returned",
+			name: "setting multiple codes but last code is returned",
+			fn: func() string {
+				op := "Foo"
+				err1 := New(op, CodeUnexpected, "bar")
+
+				op2 := "Foo2"
+				err2 := Wrap(op2, err1).SetCode(CodeInternal)
+
+				return ErrorCode(err2)
+			},
+			want: CodeInternal,
+		},
+		{
+			name: "returns outermost code",
 			fn: func() string {
 				op := "Foo"
 				err1 := New(op, CodeUnexpected, "bar")

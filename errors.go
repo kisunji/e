@@ -11,6 +11,7 @@ import (
 // itself be the root of an error stack.
 type Error struct {
 	// Represents the error type to be used by client or application.
+	// Should only exist at the root error (SetCode() enforces this).
 	// e.g. "unexpected_error", "database_error", "not_exists" etc.
 	code string
 
@@ -34,17 +35,10 @@ func (e *Error) Error() string {
 	if e.op != "" {
 		sb.WriteString(fmt.Sprintf("%s: ", e.op))
 	}
-
-	// If nested err wraps an error, write its Error() message.
-	// Otherwise write the nested root's Error() and code.
-	if errors.Unwrap(e.err) != nil {
-		sb.WriteString(e.err.Error())
-	} else {
-		sb.WriteString(e.err.Error())
-		if e.code != "" {
-			sb.WriteString(fmt.Sprintf(" [%s]", e.code))
-		}
+	if e.code != "" {
+		sb.WriteString(fmt.Sprintf("[%s] ", e.code))
 	}
+	sb.WriteString(e.err.Error())
 
 	return sb.String()
 }
@@ -55,7 +49,6 @@ func (e *Error) Unwrap() error {
 	}
 	return e.err
 }
-
 
 func (e *Error) Code() string {
 	if e == nil {
@@ -72,7 +65,7 @@ func (e *Error) Code() string {
 	return ""
 }
 
-// SetCode adds an error type to *Error.
+// SetCode adds an error type *Error
 func (e *Error) SetCode(code string) *Error {
 	if e != nil {
 		e.code = code
