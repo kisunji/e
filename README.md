@@ -89,7 +89,7 @@ work in progress!
 
 `kisunji/e` adopts the `const op = "funcName"` paradigm introduced by Rob Pike in [Upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) to build a logical stacktrace.
 
-In place of Upspin's multi-purpose `func E(args ...interface{}) error`, `kisunji/e` uses the familiar verbs `New()` and `Wrap()` to provide better type safety and simpler implementation.
+In place of Upspin's multi-purpose `E(args ...interface{})` function, `kisunji/e` uses the familiar verbs `New()` and `Wrap()` to provide better type safety and simpler implementation.
 
 Upspin did not have a clear separation between messages for end-users and the error stacktrace, making it unsuitable for a web application which needs to hide internal details.
 
