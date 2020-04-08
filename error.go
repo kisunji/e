@@ -72,8 +72,8 @@ func (e *Error) Code() string {
 		return e.code
 	}
 	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.code != "" {
-			return e.code
+		if e, ok := err.(ClientFacing); ok && e.Code() != "" {
+			return e.Code()
 		}
 	}
 	return ""
@@ -100,8 +100,8 @@ func (e *Error) Message() string {
 		return e.message
 	}
 	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.message != "" {
-			return e.message
+		if e, ok := err.(ClientFacing); ok && e.Message() != "" {
+			return e.Message()
 		}
 	}
 	return ""
