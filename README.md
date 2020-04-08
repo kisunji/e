@@ -1,6 +1,8 @@
 # kisunji/e
 
-![Go](https://github.com/kisunji/e/workflows/Go/badge.svg)
+![Go](https://github.com/kisunji/e/workflows/Go/badge.svg) 
+
+[pkg.go.dev link](https://pkg.go.dev/github.com/kisunji/e?tab=doc)
 
 Inspired by [Failure is your Domain](https://middlemost.com/failure-is-your-domain/) and [Error handling in upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) (comparison [here](#comparisons-with-other-approaches)), `kisunji/e` is designed to meet the needs of web applications by maintaining a clean separation between the error data consumed by end-users, clients, and operators. 
 
@@ -24,7 +26,7 @@ func Foo(bar string) error {
     const op = "Foo"
 
     if bar == nil {
-        return e.New(op, CodeDbError, "bar cannot be nil")
+        return e.New(op, CodeInvalidError, "bar cannot be nil")
         // "Foo: [invalid_error] bar cannot be nil"
     }
     return nil
@@ -81,13 +83,120 @@ func Foo(bar string) error {
 
 ## Handling Errors
 
-work in progress!
+### End-user
+
+`ErrorMessage()` is used to display a user-friendly error message to the end-user. `New()` and `Wrap()` do not have a `message` param (intentional design). `SetMessage()` should be called to assign an intentional, meaningful message.
+
+```go
+func doSomething(r *http.Request) error {
+    const op = "doSomething"
+
+    err := Foo()
+    if err != nil {
+        return e.Wrap(op, err).SetMessage("Oh no! An Error has occurred.")
+        // this message will not show in Error() and can only be retrieved
+        // by e.Message() or ErrorMessage()
+    }
+    return nil
+}
+```
+
+This behaviour should be combined with a default error message at the handler level to make `message` an optional field that should only be set to give additional context to the end-user.
+
+```go
+func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	bytes, err := doSomething(r)
+	if err != nil {
+        // Log full error stack
+        logger.Error(err)
+
+        // Extract the first error message from the stack
+        userMsg := e.ErrorMessage(err)
+        if userMsg == "" {
+            userMsg = "Unexpected error has occurred"
+        }
+
+        http.Error(w, userMsg, http.StatusInternalServerError)
+        return
+    }
+    w.Write(bytes)
+}
+```
+
+### Client
+
+`ErrorCode()` is intended for use by any clients such as front-end applications, other libraries, and even callers within your own application. In the context of a go codebase, `code` provides an alternative way of introspecting error types without comparing `Error()` strings or using type assertions.
+
+```go
+const (
+    CodeInvalidError = "invalid_error"
+    CodeDatabaseError = "database_error"
+) 
+
+func Foo(bar string) error {
+    const op = "Foo"
+
+    if bar == nil {
+        return e.New(op, CodeInvalidError, "bar cannot be nil")
+    }
+    err := db.GetBar(bar)
+    if err != nil {
+        return e.Wrap(op, err).SetCode(CodeDatabaseError)
+        // SetCode() may not be necessary if we control the err
+        // returned from db.GetBar().
+    }
+    return nil
+} 
+
+func doSomething(r *http.Request) error {
+    const op = "doSomething"
+
+    err := Foo(r.FormValue("bar"))
+    if err != nil {
+        var info string
+        switch e.ErrorCode(err) {
+        case CodeInvalidError: 
+            info = "Invalid Request"
+        case CodeDatabaseError:
+            err2 := RetryFoo(r.FormValue("bar"))
+            if err2 != nil {
+                info = "Database error has occurred. Please try again."
+            } else {
+                return nil
+            }            
+        default:
+            info = "Unexpected error has occurred. Please try again"
+        }
+        return e.Wrap(op, err).SetMessage(info)
+    }
+    return nil
+}
+```
+
+### Operator
+
+Operators are usually the developers or application support who are concerned with logging the logical stack trace of the error. By using the `const op = "funcName"` pattern we can easily build a chain of functions that were called down the stack to the error site.
+
+Logging `Error()` is sufficient to write the stack trace in this format:
+
+```
+op: (additionalInfo): [code] cause
+```
+
+Examples:
+```
+Foo: cannot find bar
+
+DoSomething: Foo: [database_error] cannot find bar
+
+Handler.ServeHTTP: DoSomething: Foo: (cannot find bar 2hjk7d): GetBar: getBarById: [database_error] cannot find bar
+```
 
 ## Comparisons with other approaches
 
 ### Upspin
 
-`kisunji/e` adopts the `const op = "funcName"` paradigm introduced by Rob Pike in [Upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) to build a logical stacktrace.
+`kisunji/e` adopts the `const op = "funcName"` paradigm introduced by Rob Pike and Andrew Gerrard in [Upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) to build a logical stacktrace.
 
 In place of Upspin's multi-purpose `E(args ...interface{})` function, `kisunji/e` uses the familiar verbs `New()` and `Wrap()` to provide better type safety and simpler implementation.
 
