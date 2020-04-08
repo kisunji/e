@@ -1,3 +1,8 @@
+// Package e is an error-handling package designed to be simple, safe, and
+// compatible.
+//
+// See the overview and usages:
+// https://pkg.go.dev/github.com/kisunji/e?tab=overview
 package e
 
 import (
@@ -86,7 +91,7 @@ func (e *Error) SetCode(code string) *Error {
 // Message returns a user-friendly error message (if any) which is logically
 // separate from the error stacktrace.
 //
-// Note: ErrorCode() should be used to retrieve the topmost Message()
+// Note: ErrorMessage() should be used to retrieve the topmost Message()
 func (e *Error) Message() string {
 	if e == nil {
 		return ""
