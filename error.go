@@ -91,7 +91,7 @@ func (e *Error) SetCode(code string) *Error {
 // Message returns a user-friendly error message (if any) which is logically
 // separate from the error cause.
 //
-// Note: ErrorMessage() should be used to retrieve the topmost Message()
+// Note: ErrorMessage() should be used to retrieve the topmost Message().
 func (e *Error) Message() string {
 	if e == nil {
 		return ""
@@ -108,7 +108,7 @@ func (e *Error) Message() string {
 }
 
 // SetMessage adds a user-friendly message to *Error. Message will not be
-// printed with Error().
+// printed with Error() and should be retrieved with ErrorMessage().
 func (e *Error) SetMessage(message string) *Error {
 	if e != nil {
 		e.message = message
