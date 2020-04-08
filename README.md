@@ -1,24 +1,23 @@
 # kisunji/e
 
-![Go](https://github.com/kisunji/e/workflows/Go/badge.svg) 
+![Go](https://github.com/kisunji/e/workflows/Go/badge.svg)
 
 [pkg.go.dev link](https://pkg.go.dev/github.com/kisunji/e?tab=doc)
 
-Inspired by [Failure is your Domain](https://middlemost.com/failure-is-your-domain/) and [Error handling in upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) (comparison [here](#comparisons-with-other-approaches)), `kisunji/e` is designed to meet the needs of web applications by maintaining a clean separation between the error data consumed by end-users, clients, and operators. 
+Inspired by [Failure is your Domain](https://middlemost.com/failure-is-your-domain/) and [Error handling in upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) (comparison [here](#comparisons-with-other-approaches)), `kisunji/e` is designed to meet the needs of web applications by maintaining a clean separation between the error data consumed by end-users, clients, and operators.
 
 `kisunji/e` focuses on three principles:
 
+- **Simplicity**: Small, fluent interface for developer ergonomics
 
-* **Simplicity**: Small, fluent interface for developer ergonomics
+- **Safety**: Explicitly separate end-user messages from internal errors
 
-* **Safety**: Explicitly separate end-user messages from internal errors
-
-* **Compatibility**: Follows error-wrapping conventions and can be adopted incrementally
-
+- **Compatibility**: Follows error-wrapping conventions and can be adopted incrementally
 
 ## Usage
 
 ### Creating a new Error
+
 ```go
 const CodeInvalidError = "invalid_error"
 
@@ -30,17 +29,20 @@ func Foo(bar string) error {
         // "Foo: [invalid_error] bar cannot be nil"
     }
     return nil
-} 
+}
 ```
 
 ### Wrapping an existing Error
+
+The `const op = "FuncName"` pattern reduces the burden on developers of providing context to the error and helps keep the error stack free of redundant or unhelpful messages.
+
 ```go
 func Foo(bar string) error {
     const op = "Foo"
 
     err := db.GetBar(bar) // "GetBar: [database_error] cannot find bar"
     if err != nil {
-        return e.Wrap(op, err) 
+        return e.Wrap(op, err)
         // "Foo: GetBar: [database_error] cannot find bar"
     }
     return nil
@@ -48,13 +50,14 @@ func Foo(bar string) error {
 ```
 
 `Wrap()` can take an `optionalInfo` param to inject additional context into the error stack
+
 ```go
 func Foo(bar string) error {
     const op = "Foo"
 
     err := db.GetBar(bar) // "GetBar: [database_error] cannot find bar"
     if err != nil {
-        return e.Wrap(op, err, fmt.Sprintf("bar id: %s", bar.Id)) 
+        return e.Wrap(op, err, fmt.Sprintf("bar id: %s", bar.Id))
         // "Foo: (bar id: 2hs8qh9): GetBar: [database_error] cannot find bar"
     }
     return nil
@@ -64,6 +67,7 @@ func Foo(bar string) error {
 ### Wrapping a different error type
 
 `Wrap()` can be chained with `SetCode()` to provide a new code for errors from another package (or default go errors)
+
 ```go
 // db.GetBar returns sentinel error:
 //     var ErrNotFound = errors.New("not found")
@@ -105,8 +109,8 @@ This behaviour should be combined with a default error message at the handler le
 
 ```go
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	bytes, err := doSomething(r)
-	if err != nil {
+    bytes, err := doSomething(r)
+    if err != nil {
         // Log full error stack
         logger.Error(err)
 
@@ -131,7 +135,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 const (
     CodeInvalidError = "invalid_error"
     CodeDatabaseError = "database_error"
-) 
+)
 
 func Foo(bar string) error {
     const op = "Foo"
@@ -146,7 +150,7 @@ func Foo(bar string) error {
         // returned from db.GetBar().
     }
     return nil
-} 
+}
 
 func doSomething(r *http.Request) error {
     const op = "doSomething"
@@ -155,7 +159,7 @@ func doSomething(r *http.Request) error {
     if err != nil {
         var info string
         switch e.ErrorCode(err) {
-        case CodeInvalidError: 
+        case CodeInvalidError:
             info = "Invalid Request"
         case CodeDatabaseError:
             err2 := RetryFoo(r.FormValue("bar"))
@@ -163,7 +167,7 @@ func doSomething(r *http.Request) error {
                 info = "Database error has occurred. Please try again."
             } else {
                 return nil
-            }            
+            }
         default:
             info = "Unexpected error has occurred. Please try again"
         }
@@ -175,7 +179,7 @@ func doSomething(r *http.Request) error {
 
 ### Operator
 
-Operators are usually the developers or application support who are concerned with logging the logical stack trace of the error. By using the `const op = "funcName"` pattern we can easily build a chain of functions that were called down the stack to the error site.
+Operators are usually the developers or application support who are concerned with logging the logical stack trace of the error. By using the `const op = "FuncName"` pattern we can easily build a chain of functions that were called down the stack to the error site.
 
 Logging `Error()` is sufficient to write the stack trace in this format:
 
@@ -184,6 +188,7 @@ op: (additionalInfo): [code] cause
 ```
 
 Examples:
+
 ```
 Foo: cannot find bar
 
@@ -196,7 +201,7 @@ Handler.ServeHTTP: DoSomething: Foo: (cannot find bar 2hjk7d): GetBar: getBarByI
 
 ### Upspin
 
-`kisunji/e` adopts the `const op = "funcName"` paradigm introduced by Rob Pike and Andrew Gerrard in [Upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) to build a logical stacktrace.
+`kisunji/e` adopts the `const op = "FuncName"` pattern introduced by Rob Pike and Andrew Gerrard in [Upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) to build a logical stacktrace.
 
 In place of Upspin's multi-purpose `E(args ...interface{})` function, `kisunji/e` uses the familiar verbs `New()` and `Wrap()` to provide better type safety and simpler implementation.
 
@@ -206,8 +211,8 @@ Upspin did not have a clear separation between messages for end-users and the er
 
 `kisunji/e` is heavily influenced by Ben's approach to error-handling outlined in his blog post [Failure is your Domain](https://middlemost.com/failure-is-your-domain/). These are some key differences:
 
-* `kisunji/e` does not rely on struct initialization to create errors and instead uses `New()`, `Wrap()` and other helper methods to guarantee valid internal state
-  
-* `kisunji/e` does not require the error stack to have uniform type, and is compatible with other error types
+- `kisunji/e` does not rely on struct initialization to create errors and instead uses `New()`, `Wrap()` and other helper methods to guarantee valid internal state
 
-* `kisunji/e` keeps `message` logically distinct from the error stacktrace, making it suitable for displaying to an end-user
+- `kisunji/e` does not require the error stack to have uniform type, and is compatible with other error types
+
+- `kisunji/e` keeps `message` logically distinct from the error stacktrace, making it suitable for displaying to an end-user
