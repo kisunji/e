@@ -6,24 +6,29 @@ import (
 	"strings"
 )
 
-// Error represents a standard application error.
-// Error should always have a non-nil nested err and therefore the type cannot
-// itself be the root of an error stack.
+// Error represents a standard application error. Fields are not exported
+// to encourage the use of New() and Wrap() for instantiation.
+//
+//	  // Operation being performed--usually a function/method name.
+//	  op string
+//
+// 	  // Represents the error type to be used by client or application.
+//	  // e.g. "unexpected_error", "database_error", "not_exists" etc.
+//	  code string
+//
+//	  // A user-friendly error message. Does not get printed with Error().
+//	  message string
+//
+//	  // Nested error for building an Error() stacktrace. Should not be nil.
+//	  err error
+//
+// Error should always have a non-nil nested err and therefore this type cannot
+// by itself be the true root of an error stack.
 type Error struct {
-	// Represents the error type to be used by client or application.
-	// Should only exist at the root error (SetCode() enforces this).
-	// e.g. "unexpected_error", "database_error", "not_exists" etc.
-	code string
-
-	// A user-friendly error message.
-	// Does not get printed with Error().
+	op      string
+	code    string
 	message string
-
-	// Operation being performed--usually a function/method name.
-	op string
-
-	// Nested error for building an Error() stacktrace. Should not be nil.
-	err error
+	err     error
 }
 
 func (e *Error) Error() string {
@@ -50,6 +55,10 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
+// Code returns the a short string representing the type of error, such as
+// "database_error", to be used by a client or an application.
+//
+// Note: ErrorCode() should be used to retrieve the topmost Code()
 func (e *Error) Code() string {
 	if e == nil {
 		return ""
@@ -65,7 +74,8 @@ func (e *Error) Code() string {
 	return ""
 }
 
-// SetCode adds an error type *Error
+// SetCode adds an error type to *Error such as "unexpected_error",
+// "database_error", "not_exists", etc.
 func (e *Error) SetCode(code string) *Error {
 	if e != nil {
 		e.code = code
@@ -73,6 +83,10 @@ func (e *Error) SetCode(code string) *Error {
 	return e
 }
 
+// Message returns a user-friendly error message (if any) which is logically
+// separate from the error stacktrace.
+//
+// Note: ErrorCode() should be used to retrieve the topmost Message()
 func (e *Error) Message() string {
 	if e == nil {
 		return ""
@@ -88,8 +102,8 @@ func (e *Error) Message() string {
 	return ""
 }
 
-// SetMessage adds a user-friendly message to *Error.
-// Important: ensure the string is localized for the end-user.
+// SetMessage adds a user-friendly message to *Error. Message will not be
+// printed with Error().
 func (e *Error) SetMessage(message string) *Error {
 	if e != nil {
 		e.message = message
@@ -111,7 +125,10 @@ func (e *Error) ClearMessage() *Error {
 	return e
 }
 
-// New constructs a new *Error.
+// New constructs a new *Error. op is conventionally a const of the function
+// name. code should be a short, single string describing the type of error.
+// cause is used to create the nested error which will act as the root of the
+// error stacktrace.
 //
 // Usage:
 // 		func Foo() error {
