@@ -24,7 +24,7 @@ import (
 //	  // A user-friendly error message. Does not get printed with Error().
 //	  message string
 //
-//	  // Nested error for building an Error() stacktrace. Should not be nil.
+//	  // Nested error for building an error stack. Should not be nil.
 //	  err error
 //
 // Error should always have a non-nil nested err and therefore this type cannot
@@ -89,7 +89,7 @@ func (e *Error) SetCode(code string) *Error {
 }
 
 // Message returns a user-friendly error message (if any) which is logically
-// separate from the error stacktrace.
+// separate from the error cause.
 //
 // Note: ErrorMessage() should be used to retrieve the topmost Message()
 func (e *Error) Message() string {
@@ -133,7 +133,7 @@ func (e *Error) ClearMessage() *Error {
 // New constructs a new *Error. op is conventionally a const of the function
 // name. code should be a short, single string describing the type of error.
 // cause is used to create the nested error which will act as the root of the
-// error stacktrace.
+// error stack.
 //
 // Usage:
 // 		func Foo() error {
@@ -153,7 +153,7 @@ func New(op, code, cause string) *Error {
 	}
 }
 
-// Wrap adds op to the logical stacktrace. Recommended to chain with SetCode()
+// Wrap adds op to the logical stack trace. Recommended to chain with SetCode()
 // if wrapping an external error type that does not implement ClientFacing.
 //
 // OptionalInfo can be passed to insert more context at the wrap site.
