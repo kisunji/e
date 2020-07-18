@@ -1,5 +1,9 @@
 # e
 
+![Go](https://github.com/kisunji/e/workflows/Go/badge.svg)
+
+[pkg.go.dev link](https://pkg.go.dev/github.com/kisunji/e?tab=doc)
+
 Inspired by [Failure is your Domain](https://middlemost.com/failure-is-your-domain/) and [Error handling in upspin](https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html) (comparison [here](#comparisons-with-other-approaches)), package `e` is designed to meet the needs of web applications by maintaining a clean separation between the error data consumed by end-users, clients, and operators.
 
 `e` focuses on three principles:
