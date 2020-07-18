@@ -1,220 +1,224 @@
 // Package e is an error-handling package designed to be simple, safe, and
 // compatible.
-//
-// See the overview and usages:
-// https://pkg.go.dev/github.com/kisunji/e?tab=overview
 package e
 
 import (
 	"errors"
 	"fmt"
+	"runtime"
+	"runtime/debug"
 	"strings"
 )
 
-// Error represents a standard application error. Fields are not exported
-// to encourage the use of New() and Wrap() for instantiation.
-//
-//	  // Operation being performed--usually a function/method name.
-//	  op string
-//
-// 	  // Represents the error type to be used by client or application.
-//	  // e.g. "unexpected_error", "database_error", "not_exists" etc.
-//	  code string
-//
-//	  // A user-friendly error message. Does not get printed with Error().
-//	  message string
-//
-//	  // Nested error for building an error stack. Should not be nil.
-//	  err error
-//
-// Error should always have a non-nil nested err and therefore this type cannot
-// by itself be the true root of an error stack.
-type Error struct {
-	op      string
-	code    string
-	message string
-	err     error
+// Error represents a standard application error.
+// Implements ClientFacing and HasStacktrace so it can be introspected
+// with functions like ErrorCode, ErrorMessage, and ErrorStacktrace.
+type Error interface {
+	error
+	ClientFacing
+	HasStacktrace
+
+	Unwrap() error
+
+	// SetCode adds an error type to a non-nil Error such as "unexpected_error",
+	// "database_error", "not_exists", etc.
+	//
+	// Will panic when used with a nil Error receiver.
+	SetCode(code string) Error
+
+	// SetMessage adds a user-friendly message to a non-nil Error.
+	// Message will not be printed with Error() and should be retrieved with ErrorMessage().
+	//
+	// Will panic when used with a nil Error receiver.
+	SetMessage(message string) Error
 }
 
-func (e *Error) Error() string {
-	if e == nil {
-		return ""
-	}
-
-	var sb strings.Builder
-	if e.op != "" {
-		sb.WriteString(fmt.Sprintf("%s: ", e.op))
-	}
-	if e.code != "" {
-		sb.WriteString(fmt.Sprintf("[%s] ", e.code))
-	}
-	sb.WriteString(e.err.Error())
-
-	return sb.String()
-}
-
-func (e *Error) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.err
-}
-
-// Code returns the a short string representing the type of error, such as
-// "database_error", to be used by a client or an application.
-//
-// Note: ErrorCode() should be used to retrieve the topmost Code()
-func (e *Error) Code() string {
-	if e == nil {
-		return ""
-	}
-	if e.code != "" {
-		return e.code
-	}
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(ClientFacing); ok && e.Code() != "" {
-			return e.Code()
-		}
-	}
-	return ""
-}
-
-// SetCode adds an error type to *Error such as "unexpected_error",
-// "database_error", "not_exists", etc.
-func (e *Error) SetCode(code string) *Error {
-	if e != nil {
-		e.code = code
-	}
-	return e
-}
-
-// Message returns a user-friendly error message (if any) which is logically
-// separate from the error cause.
-//
-// Note: ErrorMessage() should be used to retrieve the topmost Message().
-func (e *Error) Message() string {
-	if e == nil {
-		return ""
-	}
-	if e.message != "" {
-		return e.message
-	}
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(ClientFacing); ok && e.Message() != "" {
-			return e.Message()
-		}
-	}
-	return ""
-}
-
-// SetMessage adds a user-friendly message to *Error. Message will not be
-// printed with Error() and should be retrieved with ErrorMessage().
-func (e *Error) SetMessage(message string) *Error {
-	if e != nil {
-		e.message = message
-	}
-	return e
-}
-
-// ClearMessage unsets all messages from *Error's stack.
-func (e *Error) ClearMessage() *Error {
-	if e == nil {
-		return nil
-	}
-	e.message = ""
-	for err := e.err; err != nil; err = errors.Unwrap(err) {
-		if e, ok := err.(*Error); ok && e.message != "" {
-			e.message = ""
-		}
-	}
-	return e
-}
-
-// New constructs a new *Error. op is conventionally a const of the function
-// name. code should be a short, single string describing the type of error.
-// cause is used to create the nested error which will act as the root of the
-// error stack.
+// NewError constructs a new Error. code should be a short, single string
+// describing the type of error (typically a pre-defined const). cause is used
+// to create the nested error which will act as the root of the error stack.
 //
 // Usage:
-// 		func Foo() error {
-// 			const op = "Foo"
-// 			if bar != nil {
-// 				return e.New(op, "unexpected_error", "bar not nil")
+// 		func Foo(bar *Bar) error {
+// 			if bar == nil {
+// 				return e.New("unexpected_error", "bar is nil")
 // 			}
-//			...
+//			return doFoo(bar)
+//		}
+//
+func NewError(code, cause string) Error {
+	return errorImpl{
+		op:         getCallingFunc(2),
+		code:       code,
+		err:        errors.New(cause),
+		stacktrace: string(debug.Stack()),
+	}
+}
+
+// NewErrorf constructs a new Error with formatted string. code should be a short,
+// single string describing the type of error (typically a pre-defined const).
+// cause is used to create the nested error which will act as the root of the error stack.
+//
+// Usage:
+// 		func Foo(bar Bar) error {
+// 			done := doFoo(bar)
+// 			if !done {
+// 				return e.NewErrorf("unexpected_error", "cannot process bar: %v", bar)
+// 			}
 //			return nil
 //		}
 //
-func New(op, code, cause string) *Error {
-	return &Error{
-		op:   op,
-		code: code,
-		err:  errors.New(cause),
+func NewErrorf(code, fmtCause string, args ...interface{}) Error {
+	return errorImpl{
+		op:         getCallingFunc(2),
+		code:       code,
+		err:        fmt.Errorf(fmtCause, args...),
+		stacktrace: string(debug.Stack()),
 	}
 }
 
-// Wrap adds op to the logical stack trace. Recommended to chain with SetCode()
-// if wrapping an external error type that does not implement ClientFacing.
-//
+// Wrap adds the name of the calling function to the wrapped error.
 // OptionalInfo can be passed to insert more context at the wrap site.
 // Only the first OptionalInfo string will be used.
 //
 // Basic usage:
 // 		err := Foo()
 //		if err != nil {
-// 			return e.Wrap(op, err)
+// 			return e.Wrap(err)
 // 		}
-//
-// Wrapping an external error:
-//		err := db.Get()
-// 		if err != nil {
-//			return e.Wrap(op, err).SetCode("database_error")
-//		}
 //
 // Adding additional info:
 // 		err := Foo()
 //		if err != nil {
-// 			return e.Wrap(op, err, fmt.Sprintf("cannot find id: %v", id))
+// 			return e.Wrap(err, fmt.Sprintf("cannot find id: %v", id))
 // 		}
 //
-func Wrap(op string, err error, optionalInfo ...string) *Error {
+func Wrap(err error, optionalInfo ...string) Error {
+	if err == nil {
+		return nil
+	}
+
 	innerErr := err
 	if len(optionalInfo) > 0 {
-		innerErr = fmt.Errorf("(%v): %w", optionalInfo[0], err)
+		innerErr = fmt.Errorf("(%v): %w", optionalInfo[0], err) // localizer.Ignore
 	}
-	return &Error{
-		op:  op,
-		err: innerErr,
+
+	wrapped := errorImpl{
+		op:         getCallingFunc(2),
+		err:        innerErr,
+		stacktrace: ErrorStacktrace(err),
 	}
+
+	if wrapped.stacktrace == "" {
+		wrapped.stacktrace = string(debug.Stack())
+	}
+
+	return wrapped
 }
 
-// ClientFacing allows custom error types to be used with utility functions
-// ErrorCode() and ErrorMessage().
-type ClientFacing interface {
-	Code() string
-	Message() string
+// Wrapf adds the name of the calling function and a formatted message
+// to the wrapped error.
+//
+// Basic usage:
+// 		err := Foo(bar)
+//		if err != nil {
+// 			return e.Wrapf(err, "bar not found: %v", bar.Id)
+// 		}
+//
+func Wrapf(err error, fmtInfo string, args ...interface{}) Error {
+	if err == nil {
+		return nil
+	}
+
+	wrapped := errorImpl{
+		op:         getCallingFunc(2),
+		err:        fmt.Errorf("(%v): %w", fmt.Sprintf(fmtInfo, args...), err), // localizer.Ignore
+		stacktrace: ErrorStacktrace(err),
+	}
+
+	if wrapped.stacktrace == "" {
+		wrapped.stacktrace = string(debug.Stack())
+	}
+
+	return wrapped
 }
 
-// ErrorCode returns the first unwrapped Code of an error which implements
-// ClientFacing interface. Otherwise returns an empty string.
-func ErrorCode(err error) string {
-	for err != nil {
-		if e, ok := err.(ClientFacing); ok && e.Code() != "" {
-			return e.Code()
-		}
-		err = errors.Unwrap(err)
-	}
-	return ""
+// errorImpl should always have a non-nil nested err and therefore this type
+// cannot by itself be the true root of an error stack.
+type errorImpl struct {
+	// Operation being performed--populated at runtime automagically
+	op string
+
+	// Represents the error type to be used by client or application.
+	// e.g. "unexpected_error", "database_error", "not_exists" etc.
+	// Use ErrorCode(err) to retrieve the outermost code.
+	code string
+
+	// A user-friendly error message. Does not get printed with Error().
+	// Use ErrorMessage(err) to retrieve the outermost message.
+	message string
+
+	// Nested error for building an error stacktrace. Should not be nil.
+	err error
+
+	// Internal stacktrace for logging. Does not get printed with Error().
+	// Use ErrorStacktrace(err) to retrieve the innermost stacktrace.
+	stacktrace string
 }
 
-// ErrorMessage returns the first unwrapped Message of an error which implements
-// ClientFacing interface. Otherwise returns an empty string.
-func ErrorMessage(err error) string {
-	for err != nil {
-		if e, ok := err.(ClientFacing); ok && e.Message() != "" {
-			return e.Message()
-		}
-		err = errors.Unwrap(err)
+func (e errorImpl) Error() string {
+	var sb strings.Builder
+	if e.op != "" {
+		sb.WriteString(fmt.Sprintf("%s: ", e.op))
 	}
-	return ""
+	if e.code != "" {
+		sb.WriteString(fmt.Sprintf("[%s] ", e.code)) // localizer.Ignore
+	}
+	sb.WriteString(e.err.Error())
+
+	return sb.String()
+}
+
+func (e errorImpl) Unwrap() error {
+	return e.err
+}
+
+func (e errorImpl) ClientCode() string {
+	return e.code
+}
+
+func (e errorImpl) ClientMessage() string {
+	return e.message
+}
+
+func (e errorImpl) SetCode(code string) Error {
+	e.code = code
+	return e
+}
+
+func (e errorImpl) SetMessage(message string) Error {
+	e.message = message
+	return e
+}
+
+func (e errorImpl) Stacktrace() string {
+	return e.stacktrace
+}
+
+// getCallingFunc returns the name of the calling function N levels
+// above getCallingFunc (e.g. 0 for `getCallingFunc` itself)
+func getCallingFunc(frameOffset int) string {
+	// only need len = 1 to contain the calling function
+	programCounters := make([]uintptr, 1)
+	// base offset is 1 to skip `runtime.Callers` itself
+	n := runtime.Callers(1+frameOffset, programCounters)
+	if n == 0 {
+		return "unknown"
+	}
+	frames := runtime.CallersFrames(programCounters)
+	frame, _ := frames.Next()
+
+	// Remove package name (too verbose)
+	ss := strings.Split(frame.Function, "/")
+	funcname := ss[len(ss)-1]
+	return strings.SplitAfterN(funcname, ".", 2)[1]
 }

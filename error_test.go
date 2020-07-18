@@ -12,6 +12,8 @@ const (
 	CodeInternal   = "internal_error"
 )
 
+var errSentinel = NewError(CodeInternal, "sentinel error")
+
 func TestErrors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -20,90 +22,76 @@ func TestErrors(t *testing.T) {
 	}{
 		{
 			name: "new constructs error",
-			fn: func() error {
-				const op = "Foo"
-
-				return New(op, CodeDatabase, "cannot do something")
-			},
-			want: "Foo: [database_error] cannot do something",
+			fn:   Foo,
+			want: "Foo: [database_error] cannot foo",
 		},
 		{
 			name: "wrap adds op",
-			fn: func() error {
-				const op = "Inner"
-				err := New(op, CodeInternal, "cannot do something")
-
-				const op2 = "Outer"
-				return Wrap(op2, err)
-			},
-			want: "Outer: Inner: [internal_error] cannot do something",
+			fn:   Bar,
+			want: "Bar: Foo: [database_error] cannot foo",
+		},
+		{
+			name: "wrapf adds formatted text",
+			fn:   Barf,
+			want: "Barf: (test id: 123): Foo: [database_error] cannot foo",
 		},
 		{
 			name: "wrap adds op and optionalInfo",
-			fn: func() error {
-				const op = "Inner"
-				err := New(op, CodeInternal, "cannot do something")
-
-				const op2 = "Outer"
-				return Wrap(op2, err, "optional info here")
-			},
-			want: "Outer: (optional info here): Inner: [internal_error] cannot do something",
+			fn:   Fizz,
+			want: "Fizz: (failed to fizz): Foo: [database_error] cannot foo",
 		},
 		{
 			name: "can wrap non-package errors",
-			fn: func() error {
-				const op = "Foo"
-				err := errors.New("basic error")
-				return Wrap(op, err)
-			},
-			want: "Foo: basic error",
+			fn:   Buzz,
+			want: "Buzz: basic error",
 		},
 		{
 			name: "can non-pkg wrap Error",
-			fn: func() error {
-				const op = "Inner"
-				err := New(op, CodeInternal, "cannot do something")
-
-				const op2 = "Outer"
-				err = Wrap(op2, err)
-
-				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
-
-				const op3 = "Outer2"
-				return Wrap(op3, wrap)
-			},
-			want: "Outer2: not encouraged but compatible: Outer: Inner: [internal_error] cannot do something",
+			fn:   FizzBuzz,
+			want: "FizzBuzz: not encouraged but compatible: Foo: [database_error] cannot foo",
 		},
 		{
 			name: "multiple SetCode display correctly",
-			fn: func() error {
-				const op = "Inner"
-				err := New(op, CodeUnexpected, "unexpected error occurred")
-
-				const op2 = "Outer"
-				err2 := Wrap(op2, err)
-
-				err3 := fmt.Errorf("%v%w", "BADWRAP", err2)
-
-				const op3 = "Outer2"
-				err4 := Wrap(op3, err3, "changed code to internal").SetCode(CodeInternal)
-
-				err5 := fmt.Errorf("%v%w", "MOREBADWRAP", err4)
-
-				const op4 = "Outer3"
-				err6 := Wrap(op4, err5, "changed code to database").SetCode(CodeDatabase)
-				return err6
-			},
-			want: "Outer3: [database_error] (changed code to database): MOREBADWRAPOuter2: [internal_error] (changed code to internal): BADWRAPOuter: Inner: [unexpected_error] unexpected error occurred",
+			fn:   FizzBuzzWhiz,
+			want: "FizzBuzzWhiz: [database_error] (changed code to database): badWrapper: [internal_error] (changed code to internal): BADWRAPBar: Foo: [database_error] cannot foo",
 		},
 		{
 			name: "wrap non-pkg err then set code",
+			fn:   FooBuzz,
+			want: "FooBuzz: [database_error] database error",
+		},
+		{
+			name: "works with lambdas",
 			fn: func() error {
-				const op = "Foo"
-				err := errors.New("database error")
-				return Wrap(op, err).SetCode(CodeDatabase)
+				return NewError(CodeInternal, "called from lambda")
 			},
-			want: "Foo: [database_error] database error",
+			want: "TestErrors.func1: [internal_error] called from lambda",
+		},
+		{
+			name: "works with goroutines",
+			fn: func() error {
+				errChan := make(chan error)
+				go func() {
+					// force index of next goroutine to 2 (sanity check)
+				}()
+				go func(c chan<- error) {
+					c <- NewError(CodeInternal, "called from lambda")
+				}(errChan)
+				return <-errChan
+			},
+			want: "TestErrors.func2.2: [internal_error] called from lambda",
+		},
+		{
+			name: "NewErrorf formats string",
+			fn:   Foof,
+			want: "Foof: [database_error] id: 13",
+		},
+		{
+			name: "sentinel error works", // not recommended though!
+			fn: func() error {
+				return errSentinel
+			},
+			want: "init: [internal_error] sentinel error",
 		},
 	}
 	for _, tt := range tests {
@@ -115,6 +103,66 @@ func TestErrors(t *testing.T) {
 	}
 }
 
+func Foo() error {
+	return NewError(CodeDatabase, "cannot foo")
+}
+
+func Bar() error {
+	err := Foo()
+	if err != nil {
+		return Wrap(err)
+	}
+	return nil
+}
+
+func Barf() error {
+	err := Foo()
+	if err != nil {
+		return Wrapf(err, "test id: %v", 123)
+	}
+	return nil
+}
+
+func Fizz() error {
+	err := Foo()
+	if err != nil {
+		return Wrap(err, "failed to fizz")
+	}
+	return nil
+}
+
+func Buzz() error {
+	err := errors.New("basic error")
+	return Wrap(err)
+}
+
+func FizzBuzz() error {
+	err := Foo()
+	wrap := fmt.Errorf("not encouraged but compatible: %w", err)
+	return Wrap(wrap)
+}
+
+func FizzBuzzWhiz() error {
+	err := badWrapper()
+	return Wrap(err, "changed code to database").SetCode(CodeDatabase)
+}
+
+func badWrapper() error {
+	err := Bar()
+	err2 := fmt.Errorf("%v%w", "BADWRAP", err)
+	return Wrap(err2, "changed code to internal").SetCode(CodeInternal)
+}
+
+func FooBuzz() error {
+	err := errors.New("database error")
+	return Wrap(err).SetCode(CodeDatabase)
+}
+
+func Foof() error {
+	format := 13
+	return NewErrorf(CodeDatabase, "id: %d", format)
+}
+
 func TestErrorMessage(t *testing.T) {
 	tests := []struct {
 		name string
@@ -124,8 +172,7 @@ func TestErrorMessage(t *testing.T) {
 		{
 			name: "unset message returns blank",
 			fn: func() string {
-				op := "Foo"
-				err := New(op, CodeUnexpected, "unexpected error occurred")
+				err := NewError(CodeUnexpected, "unexpected error occurred")
 				return ErrorMessage(err)
 			},
 			want: "",
@@ -133,8 +180,7 @@ func TestErrorMessage(t *testing.T) {
 		{
 			name: "set message returns correctly",
 			fn: func() string {
-				op := "Foo"
-				err := New(op, CodeUnexpected, "unexpected error occurred").SetMessage("oh no")
+				err := NewError(CodeUnexpected, "unexpected error occurred").SetMessage("oh no")
 				return ErrorMessage(err)
 			},
 			want: "oh no",
@@ -142,11 +188,9 @@ func TestErrorMessage(t *testing.T) {
 		{
 			name: "multiple messages but outermost message is returned",
 			fn: func() string {
-				op := "Foo"
-				err1 := New(op, CodeUnexpected, "bar").SetMessage("don't show this")
+				err1 := NewError(CodeUnexpected, "bar").SetMessage("don't show this")
 
-				op2 := "Foo2"
-				err2 := Wrap(op2, err1).SetMessage("show this")
+				err2 := Wrap(err1).SetMessage("show this")
 
 				return ErrorMessage(err2)
 			},
@@ -155,37 +199,16 @@ func TestErrorMessage(t *testing.T) {
 		{
 			name: "works with non-pkg wrapping",
 			fn: func() string {
-				const op = "Inner"
-				err := New(op, CodeInternal, "cannot do something")
-
-				const op2 = "Outer"
-				err = Wrap(op2, err).SetMessage("wrapped by fmt.Errorf")
+				err := NewError(CodeInternal, "cannot do something")
+				err = Wrap(err).SetMessage("wrapped by fmt.Errorf")
 
 				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
 
-				const op3 = "Outer2"
-				wrap2 := Wrap(op3, wrap)
+				wrap2 := Wrap(wrap)
 
 				return ErrorMessage(wrap2)
 			},
 			want: "wrapped by fmt.Errorf",
-		},
-		{
-			name: "cleared message does not get returned",
-			fn: func() string {
-				const op = "Foo"
-				err := New(op, CodeInternal, "fail fail fail").SetMessage("clear me!")
-
-				const op2 = "Outer"
-				err = Wrap(op2, err).SetMessage("clear me too!")
-
-				const op3 = "Outer2"
-				err = Wrap(op3, err).SetMessage("clear all of us!")
-
-				err = err.ClearMessage()
-				return ErrorMessage(err)
-			},
-			want: "",
 		},
 	}
 	for _, tt := range tests {
@@ -206,17 +229,15 @@ func TestErrorCode(t *testing.T) {
 		{
 			name: "unset code returns blank",
 			fn: func() string {
-				op := "Foo"
-				err := New(op, "", "unexpected error occurred")
+				err := NewError("", "unexpected error occurred")
 				return ErrorCode(err)
 			},
 			want: "",
 		},
 		{
-			name: "set code with New() returns correctly",
+			name: "set code with NewError() returns correctly",
 			fn: func() string {
-				op := "Foo"
-				err := New(op, CodeUnexpected, "unexpected error occurred")
+				err := NewError(CodeUnexpected, "unexpected error occurred")
 				return ErrorCode(err)
 			},
 			want: CodeUnexpected,
@@ -224,9 +245,8 @@ func TestErrorCode(t *testing.T) {
 		{
 			name: "set code with Wrap() returns correctly",
 			fn: func() string {
-				op := "Foo"
 				err := errors.New("db error occurred")
-				wrap := Wrap(op, err).SetCode(CodeDatabase)
+				wrap := Wrap(err).SetCode(CodeDatabase)
 				return ErrorCode(wrap)
 			},
 			want: CodeDatabase,
@@ -234,11 +254,9 @@ func TestErrorCode(t *testing.T) {
 		{
 			name: "setting multiple codes but last code is returned",
 			fn: func() string {
-				op := "Foo"
-				err1 := New(op, CodeUnexpected, "bar")
+				err1 := NewError(CodeUnexpected, "bar")
 
-				op2 := "Foo2"
-				err2 := Wrap(op2, err1).SetCode(CodeInternal)
+				err2 := Wrap(err1).SetCode(CodeInternal)
 
 				return ErrorCode(err2)
 			},
@@ -247,11 +265,9 @@ func TestErrorCode(t *testing.T) {
 		{
 			name: "returns outermost code",
 			fn: func() string {
-				op := "Foo"
-				err1 := New(op, CodeUnexpected, "bar")
+				err1 := NewError(CodeUnexpected, "bar")
 
-				op2 := "Foo2"
-				err2 := Wrap(op2, err1).SetCode(CodeInternal)
+				err2 := Wrap(err1).SetCode(CodeInternal)
 
 				return ErrorCode(err2)
 			},
@@ -260,16 +276,13 @@ func TestErrorCode(t *testing.T) {
 		{
 			name: "works with non-pkg wrapping",
 			fn: func() string {
-				const op = "Inner"
-				err := New(op, CodeInternal, "cannot do something")
+				err := NewError(CodeInternal, "cannot do something")
 
-				const op2 = "Outer"
-				err = Wrap(op2, err)
+				err = Wrap(err)
 
 				wrap := fmt.Errorf("not encouraged but compatible: %w", err)
 
-				const op3 = "Outer2"
-				wrap2 := Wrap(op3, wrap)
+				wrap2 := Wrap(wrap)
 
 				return ErrorCode(wrap2)
 			},
@@ -280,6 +293,65 @@ func TestErrorCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.fn(); got != tt.want {
 				t.Errorf("\ngot:  %q\nwant: %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestErrorStack(t *testing.T) {
+	t.Run("ErrorStacktrace returns something", func(t *testing.T) {
+		err := NewError("", "unexpected error occurred")
+		if ErrorStacktrace(err) == "" {
+			t.Fatalf("expected stacktrace from ErrorStacktrace() but got none")
+		}
+	})
+	t.Run("ErrorStacktrace returns inner stacktrace", func(t *testing.T) {
+		err := NewError("", "unexpected error occurred")
+		badError := errorImpl{
+			op:         "BAD",
+			code:       "BAD",
+			message:    "BAD",
+			err:        err,
+			stacktrace: "BAD",
+		}
+		if ErrorStacktrace(badError) == "BAD" {
+			t.Fatalf("expected inner stacktrace from ErrorStacktrace() but got outer")
+		}
+	})
+}
+
+func Benchmark_getCallingFunc(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		getCallingFunc(0)
+	}
+}
+
+func Test_getCallingFunc(t *testing.T) {
+	tests := []struct {
+		name        string
+		frameOffset int
+		want        string
+	}{
+		{
+			name:        "gets itself",
+			frameOffset: 0,
+			want:        "getCallingFunc",
+		},
+		{
+			name:        "any negative number returns Callers",
+			frameOffset: -1000,
+			want:        "Callers",
+		},
+		{
+			name:        "super high number returns unknown",
+			frameOffset: 9999,
+			want:        "unknown",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getCallingFunc(tt.frameOffset); got != tt.want {
+				t.Errorf("getCallingFunc() = %v, want %v", got, tt.want)
 			}
 		})
 	}
